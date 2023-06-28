@@ -117,7 +117,7 @@ fn main() {
         ));
     }
 
-    match img.save_with_format("./results/output.png", image::ImageFormat::Png) {
+    match img.save_with_format("output.png", image::ImageFormat::Png) {
         Ok(_) => pb.finish_with_message("100% <Operation completed successfully>"),
         Err(_) => pb.finish_with_message("Operation Failed"),
     }
