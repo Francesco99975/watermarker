@@ -1,7 +1,7 @@
 use std::ops::{Bound, RangeBounds};
 use std::{env, process};
 
-use image::{GenericImageView, ImageBuffer, Rgba};
+use image::{GenericImageView, ImageBuffer, Pixel, Rgba};
 use indicatif::{ProgressBar, ProgressStyle};
 
 const ACCEPTED_MIMETYPES: [&str; 5] = ["png", "jpeg", "ico", "webp", "bmp"];
@@ -124,15 +124,16 @@ fn main() {
     let mut wx: u32 = 0;
     let mut wy: u32 = 0;
 
-    for (x, y, pixel) in main_img.pixels() {
+    for (x, y, mut pixel) in main_img.pixels() {
         if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
             let w_pixel = watermark.get_pixel(wx, wy);
 
             if w_pixel.0[3] == 0 {
-                img.put_pixel(x, y, image::Rgba(pixel.0.map(|p| p)));
+                img.put_pixel(x, y, pixel);
             } else {
-                // println!("Writing watermark pixel");
-                img.put_pixel(x, y, image::Rgba(w_pixel.0.map(|p| p)));
+                // Appling Watermark pixel
+                pixel.blend(&w_pixel);
+                img.put_pixel(x, y, pixel);
             }
 
             wx += 1;
