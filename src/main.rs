@@ -1,9 +1,8 @@
-use std::fs::File;
-use std::io::BufWriter;
 use std::ops::{Bound, RangeBounds};
 use std::{env, process};
 
-use image::{GenericImageView, ImageBuffer, ImageOutputFormat, Rgba};
+use image::{GenericImageView, ImageBuffer, Rgba};
+use indicatif::{ProgressBar, ProgressStyle};
 
 const ACCEPTED_MIMETYPES: [&str; 5] = ["png", "jpeg", "ico", "webp", "bmp"];
 
@@ -93,6 +92,22 @@ fn main() {
 
     let mut img = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(main_img.width(), main_img.height());
 
+    // let styles = [
+    //     ("Rough bar:", "█  ", "red"),
+    //     ("Fine bar: ", "█▉▊▋▌▍▎▏  ", "yellow"),
+    //     ("Vertical: ", "█▇▆▅▄▃▂▁  ", "green"),
+    //     ("Fade in:  ", "█▓▒░  ", "blue"),
+    //     ("Blocky:   ", "█▛▌▖  ", "magenta"),
+    // ];
+
+    let pb = ProgressBar::new((img.width() * img.height()) as u64);
+    pb.set_style(
+        ProgressStyle::with_template(&format!("{{prefix:.bold}}▕{{bar:.{}}}▏{{msg}}", "yellow"))
+            .unwrap()
+            .progress_chars("█▉▊▋▌▍▎▏  "),
+    );
+    pb.set_prefix("Appling Watermark");
+
     let x_padding: u32 = 20;
     let y_padding: u32 = main_img.height() - x_padding;
 
@@ -113,6 +128,13 @@ fn main() {
         if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
             let w_pixel = watermark.get_pixel(wx, wy);
 
+            if w_pixel.0[3] == 0 {
+                img.put_pixel(x, y, image::Rgba(pixel.0.map(|p| p)));
+            } else {
+                // println!("Writing watermark pixel");
+                img.put_pixel(x, y, image::Rgba(w_pixel.0.map(|p| p)));
+            }
+
             wx += 1;
 
             if wx == watermark.width() {
@@ -123,27 +145,19 @@ fn main() {
                     wy = 0;
                 }
             }
-
-            println!("Main Coords: {} - {}", x, y);
-            println!("WM Coords: {} - {}", wx, wy);
-
-            if w_pixel.0[3] == 0 {
-                img.put_pixel(x, y, pixel);
-            } else {
-                println!("Writing watermark pixel\n\n");
-                img.put_pixel(x, y, w_pixel);
-            }
         } else {
             img.put_pixel(x, y, pixel);
         }
+
+        pb.inc(1);
+        pb.set_message(format!(
+            "{:3}%",
+            100 * pb.position() / ((img.width() * img.height()) as u64)
+        ));
     }
 
-    let output = File::create("./results/output.png").expect("Could not create output file");
-
-    let mut writer = BufWriter::new(output);
-
-    match img.write_to(&mut writer, ImageOutputFormat::Png) {
-        Ok(_) => println!("Operation completed"),
-        Err(_) => println!("Operation failed"),
+    match img.save_with_format("./results/output.png", image::ImageFormat::Png) {
+        Ok(_) => pb.finish_with_message("100% <Operation completed successfully>"),
+        Err(_) => pb.finish_with_message("Operation Failed"),
     }
 }
