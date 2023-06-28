@@ -1,80 +1,40 @@
-use std::ops::{Bound, RangeBounds};
 use std::{env, process};
 
+use constants::ACCEPTED_MIMETYPES;
 use image::{GenericImageView, ImageBuffer, Pixel, Rgba};
 use indicatif::{ProgressBar, ProgressStyle};
+use string_ext::StringUtils;
+use verifier::get_mime_index;
 
-const ACCEPTED_MIMETYPES: [&str; 5] = ["png", "jpeg", "ico", "webp", "bmp"];
-
-trait StringUtils {
-    fn substring(&self, start: usize, len: usize) -> &str;
-    fn slice(&self, range: impl RangeBounds<usize>) -> &str;
-}
-
-impl StringUtils for str {
-    fn substring(&self, start: usize, len: usize) -> &str {
-        let mut char_pos = 0;
-        let mut byte_start = 0;
-        let mut it = self.chars();
-        loop {
-            if char_pos == start {
-                break;
-            }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_start += c.len_utf8();
-            } else {
-                break;
-            }
-        }
-        char_pos = 0;
-        let mut byte_end = byte_start;
-        loop {
-            if char_pos == len {
-                break;
-            }
-            if let Some(c) = it.next() {
-                char_pos += 1;
-                byte_end += c.len_utf8();
-            } else {
-                break;
-            }
-        }
-        &self[byte_start..byte_end]
-    }
-    fn slice(&self, range: impl RangeBounds<usize>) -> &str {
-        let start = match range.start_bound() {
-            Bound::Included(bound) | Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => 0,
-        };
-        let len = match range.end_bound() {
-            Bound::Included(bound) => *bound + 1,
-            Bound::Excluded(bound) => *bound,
-            Bound::Unbounded => self.len(),
-        } - start;
-        self.substring(start, len)
-    }
-}
+mod constants;
+mod string_ext;
+mod verifier;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().skip(1).collect();
 
-    if args.len() != 3 {
-        println!("Please enter the path to 2 images");
+    if args.len() != 2 {
+        println!("Not enough arguments... Quitting");
         process::exit(1);
     }
 
-    let img_path = &args[1];
-    let watermark_path = &args[2];
+    let img_path = &args[0];
+    let watermark_path = &args[1];
 
-    let dot_index_1 = match img_path.chars().skip(1).position(|x| x == '.') {
-        Some(inx) => inx,
-        None => process::exit(1),
+    let dot_index_1 = match get_mime_index(img_path) {
+        Ok(index) => index,
+        Err(_) => {
+            println!("Invalid path found. Check that your paths are valid...");
+            process::exit(1);
+        }
     };
 
-    let dot_index_2 = match watermark_path.chars().skip(1).position(|x| x == '.') {
-        Some(inx) => inx,
-        None => process::exit(1),
+    let dot_index_2 = match get_mime_index(watermark_path) {
+        Ok(index) => index,
+        Err(_) => {
+            println!("Invalid path found. Check that your paths are valid...");
+            process::exit(1);
+        }
     };
 
     let mime1 = img_path.substring(dot_index_1 + 2, img_path.len());
