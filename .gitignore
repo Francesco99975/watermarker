@@ -3,3 +3,6 @@
 /results
 .vscode
 output*
+*png
+*jpg
+*jpeg
