@@ -2,7 +2,7 @@ use std::{env, fs, process};
 
 use constants::ACCEPTED_MIMETYPES;
 use helpers::get_dirs_images_paths;
-use image::{DynamicImage, GenericImageView, ImageBuffer, Pixel, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView, Pixel};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
 use structures::LoadedImage;
@@ -12,42 +12,26 @@ mod helpers;
 mod structures;
 
 async fn compute_image(
-    processing_image: DynamicImage,
+    mut processing_image: DynamicImage,
     processing_watermark: DynamicImage,
+    wx_range: (u32, u32),
+    wy_range: (u32, u32),
     pb: &ProgressBar,
     path: String,
     extension: String,
 ) {
-    let mut img =
-        ImageBuffer::<Rgba<u8>, Vec<u8>>::new(processing_image.width(), processing_image.height());
-
-    let x_padding: u32 = 20;
-    let y_padding: u32 = processing_image.height() - x_padding;
-
-    let wx_range = (
-        processing_image.width() - x_padding - processing_watermark.width(),
-        processing_image.width() - x_padding,
-    );
-
-    let wy_range = (
-        processing_image.height() - y_padding,
-        processing_image.height() - y_padding + processing_watermark.height(),
-    );
-
     let mut wx: u32 = 0;
     let mut wy: u32 = 0;
 
-    for (x, y, mut pixel) in processing_image.pixels() {
-        if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
+    for y in wy_range.0..wy_range.1 {
+        for x in wx_range.0..wx_range.1 {
+            let mut pixel = processing_image.get_pixel(x, y);
             let w_pixel = processing_watermark.get_pixel(wx, wy);
 
-            if w_pixel.0[3] == 0 {
-                img.put_pixel(x, y, pixel);
-            } else {
-                // Appling Watermark pixel
-                pixel.blend(&w_pixel);
-                img.put_pixel(x, y, pixel);
-            }
+            // Appling Watermark pixel
+            // println!("Appling Watermark pixel: {} {}", wx, wy);
+            pixel.blend(&w_pixel);
+            processing_image.put_pixel(x, y, pixel);
 
             wx += 1;
 
@@ -59,18 +43,17 @@ async fn compute_image(
                     wy = 0;
                 }
             }
-        } else {
-            img.put_pixel(x, y, pixel);
-        }
 
-        pb.inc(1);
-        pb.set_message(format!(
-            "{:3}%",
-            100 * pb.position() / ((img.width() * img.height()) as u64)
-        ));
+            pb.inc(1);
+            pb.set_message(format!(
+                "{:3}%",
+                100 * pb.position()
+                    / ((processing_watermark.width() * processing_watermark.height()) as u64)
+            ));
+        }
     }
 
-    match img.save_with_format(
+    match processing_image.save_with_format(
         path,
         ACCEPTED_MIMETYPES
             .iter()
@@ -83,7 +66,7 @@ async fn compute_image(
     }
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 1)]
+#[tokio::main(flavor = "multi_thread", worker_threads = 5)]
 async fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
 
@@ -152,12 +135,10 @@ async fn main() {
     let watermark: DynamicImage =
         image::open(watermark_path).expect("Could not load watermark file");
 
-    let styles = [
-        ("Rough bar:", "█  ", "red"),
-        ("Fine bar: ", "█▉▊▋▌▍▎▏  ", "yellow"),
-        ("Vertical: ", "█▇▆▅▄▃▂▁  ", "green"),
-        ("Fade in:  ", "█▓▒░  ", "blue"),
-        ("Blocky:   ", "█▛▌▖  ", "magenta"),
+    let styles: [&str; 5] = ["█  ", "█▉▊▋▌▍▎▏  ", "█▇▆▅▄▃▂▁  ", "█▓▒░  ", "█▛▌▖  "];
+
+    let colors: [&str; 7] = [
+        "red", "yellow", "green", "blue", "magenta", "orange", "purple",
     ];
 
     let multi_bars = MultiProgress::new();
@@ -166,18 +147,18 @@ async fn main() {
         .iter()
         .map(|image_to_process| {
             let pb = multi_bars.add(ProgressBar::new(
-                (image_to_process.data.width() * image_to_process.data.height()) as u64,
+                (watermark.width() * watermark.height()) as u64,
             ));
             let syl = styles
                 .choose(&mut rand::thread_rng())
                 .expect("Could not choose style");
+            let col = colors
+                .choose(&mut rand::thread_rng())
+                .expect("Could not choose color");
             pb.set_style(
-                ProgressStyle::with_template(&format!(
-                    "{{prefix:.bold}}▕{{bar:.{}}}▏{{msg}}",
-                    syl.2
-                ))
-                .unwrap()
-                .progress_chars(syl.1),
+                ProgressStyle::with_template(&format!("{{prefix:.bold}}▕{{bar:.{}}}▏{{msg}}", col))
+                    .unwrap()
+                    .progress_chars(syl),
             );
             pb.set_prefix(format!(
                 "Appling Watermark for {}.{}",
@@ -186,6 +167,18 @@ async fn main() {
 
             let processing_image = image_to_process.data.clone();
             let processing_watermark = watermark.clone();
+            let x_padding: u32 = 20;
+            let y_padding: u32 = processing_image.height() - x_padding;
+
+            let wx_range = (
+                processing_image.width() - x_padding - processing_watermark.width(),
+                processing_image.width() - x_padding,
+            );
+
+            let wy_range = (
+                processing_image.height() - y_padding,
+                processing_image.height() - y_padding + processing_watermark.height(),
+            );
             let filename = image_to_process.filename.clone();
             let extension = image_to_process.ext.clone();
             let path = if !outdir.is_empty() {
@@ -198,7 +191,16 @@ async fn main() {
             };
 
             tokio::spawn(async move {
-                compute_image(processing_image, processing_watermark, &pb, path, extension).await
+                compute_image(
+                    processing_image,
+                    processing_watermark,
+                    wx_range,
+                    wy_range,
+                    &pb,
+                    path,
+                    extension,
+                )
+                .await
             })
         })
         .collect();
