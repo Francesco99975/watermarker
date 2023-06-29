@@ -2,7 +2,7 @@ use std::{env, fs, process, thread};
 
 use constants::ACCEPTED_MIMETYPES;
 use helpers::get_dirs_images_paths;
-use image::{DynamicImage, GenericImageView, ImageBuffer, Pixel, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView, Pixel};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
 use structures::LoadedImage;
@@ -93,7 +93,7 @@ fn main() {
         .iter()
         .map(|image_to_process| {
             let pb = multi_bars.add(ProgressBar::new(
-                (image_to_process.data.width() * image_to_process.data.height()) as u64,
+                (watermark.width() * watermark.height()) as u64,
             ));
             let syl = styles
                 .choose(&mut rand::thread_rng())
@@ -111,12 +111,7 @@ fn main() {
                 image_to_process.filename, image_to_process.ext,
             ));
 
-            let mut img = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(
-                image_to_process.data.width(),
-                image_to_process.data.height(),
-            );
-
-            let processing_image = image_to_process.data.clone();
+            let mut processing_image = image_to_process.data.clone();
             let processing_watermark = watermark.clone();
             let filename = image_to_process.filename.clone();
             let extension = image_to_process.ext.clone();
@@ -146,17 +141,15 @@ fn main() {
                 let mut wx: u32 = 0;
                 let mut wy: u32 = 0;
 
-                for (x, y, mut pixel) in processing_image.pixels() {
-                    if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
+                for y in wy_range.0..wy_range.1 {
+                    for x in wx_range.0..wx_range.1 {
+                        let mut pixel = processing_image.get_pixel(x, y);
                         let w_pixel = processing_watermark.get_pixel(wx, wy);
 
-                        if w_pixel.0[3] == 0 {
-                            img.put_pixel(x, y, pixel);
-                        } else {
-                            // Appling Watermark pixel
-                            pixel.blend(&w_pixel);
-                            img.put_pixel(x, y, pixel);
-                        }
+                        // Appling Watermark pixel
+                        // println!("Appling Watermark pixel: {} {}", wx, wy);
+                        pixel.blend(&w_pixel);
+                        processing_image.put_pixel(x, y, pixel);
 
                         wx += 1;
 
@@ -168,18 +161,18 @@ fn main() {
                                 wy = 0;
                             }
                         }
-                    } else {
-                        img.put_pixel(x, y, pixel);
-                    }
 
-                    pb.inc(1);
-                    pb.set_message(format!(
-                        "{:3}%",
-                        100 * pb.position() / ((img.width() * img.height()) as u64)
-                    ));
+                        pb.inc(1);
+                        pb.set_message(format!(
+                            "{:3}%",
+                            100 * pb.position()
+                                / ((processing_watermark.width() * processing_watermark.height())
+                                    as u64)
+                        ));
+                    }
                 }
 
-                match img.save_with_format(
+                match processing_image.save_with_format(
                     path,
                     ACCEPTED_MIMETYPES
                         .iter()
