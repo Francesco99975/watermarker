@@ -143,7 +143,7 @@ async fn main() {
 
     let multi_bars = MultiProgress::new();
 
-    let handles: Vec<_> = images_to_process
+    let _: Vec<_> = images_to_process
         .iter()
         .map(|image_to_process| {
             let pb = multi_bars.add(ProgressBar::new(
@@ -204,8 +204,4 @@ async fn main() {
             })
         })
         .collect();
-
-    for thread in handles {
-        thread.await.unwrap();
-    }
 }
