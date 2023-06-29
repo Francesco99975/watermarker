@@ -1,4 +1,4 @@
-use std::{env, fs, process, thread};
+use std::{env, fs, process};
 
 use constants::ACCEPTED_MIMETYPES;
 use helpers::get_dirs_images_paths;
@@ -11,7 +11,80 @@ mod constants;
 mod helpers;
 mod structures;
 
-fn main() {
+async fn compute_image(
+    processing_image: DynamicImage,
+    processing_watermark: DynamicImage,
+    pb: &ProgressBar,
+    path: String,
+    extension: String,
+) {
+    let mut img =
+        ImageBuffer::<Rgba<u8>, Vec<u8>>::new(processing_image.width(), processing_image.height());
+
+    let x_padding: u32 = 20;
+    let y_padding: u32 = processing_image.height() - x_padding;
+
+    let wx_range = (
+        processing_image.width() - x_padding - processing_watermark.width(),
+        processing_image.width() - x_padding,
+    );
+
+    let wy_range = (
+        processing_image.height() - y_padding,
+        processing_image.height() - y_padding + processing_watermark.height(),
+    );
+
+    let mut wx: u32 = 0;
+    let mut wy: u32 = 0;
+
+    for (x, y, mut pixel) in processing_image.pixels() {
+        if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
+            let w_pixel = processing_watermark.get_pixel(wx, wy);
+
+            if w_pixel.0[3] == 0 {
+                img.put_pixel(x, y, pixel);
+            } else {
+                // Appling Watermark pixel
+                pixel.blend(&w_pixel);
+                img.put_pixel(x, y, pixel);
+            }
+
+            wx += 1;
+
+            if wx == processing_watermark.width() {
+                wx = 0;
+                wy += 1;
+
+                if wy == processing_watermark.height() {
+                    wy = 0;
+                }
+            }
+        } else {
+            img.put_pixel(x, y, pixel);
+        }
+
+        pb.inc(1);
+        pb.set_message(format!(
+            "{:3}%",
+            100 * pb.position() / ((img.width() * img.height()) as u64)
+        ));
+    }
+
+    match img.save_with_format(
+        path,
+        ACCEPTED_MIMETYPES
+            .iter()
+            .find(|m| m.extension == extension)
+            .expect("MimeType not supported")
+            .format,
+    ) {
+        Ok(_) => pb.finish_with_message("100% <Operation completed successfully>"),
+        Err(_) => pb.finish_with_message("Operation Failed"),
+    }
+}
+
+#[tokio::main(flavor = "multi_thread", worker_threads = 1)]
+async fn main() {
     let mut args: Vec<String> = env::args().skip(1).collect();
 
     if args.len() < 2 {
@@ -111,11 +184,6 @@ fn main() {
                 image_to_process.filename, image_to_process.ext,
             ));
 
-            let mut img = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(
-                image_to_process.data.width(),
-                image_to_process.data.height(),
-            );
-
             let processing_image = image_to_process.data.clone();
             let processing_watermark = watermark.clone();
             let filename = image_to_process.filename.clone();
@@ -129,72 +197,13 @@ fn main() {
                 format!("{}_WATERMARKED.{}", filename, extension)
             };
 
-            thread::spawn(move || {
-                let x_padding: u32 = 20;
-                let y_padding: u32 = processing_image.height() - x_padding;
-
-                let wx_range = (
-                    processing_image.width() - x_padding - processing_watermark.width(),
-                    processing_image.width() - x_padding,
-                );
-
-                let wy_range = (
-                    processing_image.height() - y_padding,
-                    processing_image.height() - y_padding + processing_watermark.height(),
-                );
-
-                let mut wx: u32 = 0;
-                let mut wy: u32 = 0;
-
-                for (x, y, mut pixel) in processing_image.pixels() {
-                    if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
-                        let w_pixel = processing_watermark.get_pixel(wx, wy);
-
-                        if w_pixel.0[3] == 0 {
-                            img.put_pixel(x, y, pixel);
-                        } else {
-                            // Appling Watermark pixel
-                            pixel.blend(&w_pixel);
-                            img.put_pixel(x, y, pixel);
-                        }
-
-                        wx += 1;
-
-                        if wx == processing_watermark.width() {
-                            wx = 0;
-                            wy += 1;
-
-                            if wy == processing_watermark.height() {
-                                wy = 0;
-                            }
-                        }
-                    } else {
-                        img.put_pixel(x, y, pixel);
-                    }
-
-                    pb.inc(1);
-                    pb.set_message(format!(
-                        "{:3}%",
-                        100 * pb.position() / ((img.width() * img.height()) as u64)
-                    ));
-                }
-
-                match img.save_with_format(
-                    path,
-                    ACCEPTED_MIMETYPES
-                        .iter()
-                        .find(|m| m.extension == extension)
-                        .expect("MimeType not supported")
-                        .format,
-                ) {
-                    Ok(_) => pb.finish_with_message("100% <Operation completed successfully>"),
-                    Err(_) => pb.finish_with_message("Operation Failed"),
-                }
+            tokio::spawn(async move {
+                compute_image(processing_image, processing_watermark, &pb, path, extension).await
             })
         })
         .collect();
 
     for thread in handles {
-        thread.join().expect("Thread Error");
+        thread.await.unwrap();
     }
 }
