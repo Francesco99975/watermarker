@@ -1,7 +1,7 @@
 use std::{env, process};
 
 use constants::ACCEPTED_MIMETYPES;
-use image::{GenericImageView, ImageBuffer, Pixel, Rgba};
+use image::{GenericImage, GenericImageView, Pixel};
 use indicatif::{ProgressBar, ProgressStyle};
 use string_ext::StringUtils;
 use verifier::get_mime_index;
@@ -47,10 +47,8 @@ fn main() {
         process::exit(1)
     }
 
-    let main_img = image::open(img_path).expect("File not found");
+    let mut main_img = image::open(img_path).expect("File not found");
     let watermark = image::open(watermark_path).expect("File not found");
-
-    let mut img = ImageBuffer::<Rgba<u8>, Vec<u8>>::new(main_img.width(), main_img.height());
 
     // let styles = [
     //     ("Rough bar:", "█  ", "red"),
@@ -60,11 +58,11 @@ fn main() {
     //     ("Blocky:   ", "█▛▌▖  ", "magenta"),
     // ];
 
-    let pb = ProgressBar::new((img.width() * img.height()) as u64);
+    let pb = ProgressBar::new((watermark.width() * watermark.height()) as u64);
     pb.set_style(
         ProgressStyle::with_template(&format!("{{prefix:.bold}}▕{{bar:.{}}}▏{{msg}}", "yellow"))
             .unwrap()
-            .progress_chars("█▉▊▋▌▍▎▏  "),
+            .progress_chars("█▇▆▅▄▃▂▁  "),
     );
     pb.set_prefix("Appling Watermark");
 
@@ -84,17 +82,15 @@ fn main() {
     let mut wx: u32 = 0;
     let mut wy: u32 = 0;
 
-    for (x, y, mut pixel) in main_img.pixels() {
-        if x > wx_range.0 && x <= wx_range.1 && y >= wy_range.0 && y < wy_range.1 {
+    for y in wy_range.0..wy_range.1 {
+        for x in wx_range.0..wx_range.1 {
+            let mut pixel = main_img.get_pixel(x, y);
             let w_pixel = watermark.get_pixel(wx, wy);
 
-            if w_pixel.0[3] == 0 {
-                img.put_pixel(x, y, pixel);
-            } else {
-                // Appling Watermark pixel
-                pixel.blend(&w_pixel);
-                img.put_pixel(x, y, pixel);
-            }
+            // Appling Watermark pixel
+            // println!("Appling Watermark pixel: {} {}", wx, wy);
+            pixel.blend(&w_pixel);
+            main_img.put_pixel(x, y, pixel);
 
             wx += 1;
 
@@ -106,18 +102,16 @@ fn main() {
                     wy = 0;
                 }
             }
-        } else {
-            img.put_pixel(x, y, pixel);
-        }
 
-        pb.inc(1);
-        pb.set_message(format!(
-            "{:3}%",
-            100 * pb.position() / ((img.width() * img.height()) as u64)
-        ));
+            pb.inc(1);
+            pb.set_message(format!(
+                "{:3}%",
+                100 * pb.position() / ((watermark.width() * watermark.height()) as u64)
+            ));
+        }
     }
 
-    match img.save_with_format("output.png", image::ImageFormat::Png) {
+    match main_img.save_with_format("output.png", image::ImageFormat::Png) {
         Ok(_) => pb.finish_with_message("100% <Operation completed successfully>"),
         Err(_) => pb.finish_with_message("Operation Failed"),
     }
