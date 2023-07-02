@@ -1,7 +1,6 @@
 use std::{env, fs, process};
 
-use constants::ACCEPTED_MIMETYPES;
-use helpers::get_dirs_images_paths;
+use helpers::{get_dirs_images_paths, is_valid_mime};
 use image::DynamicImage;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::seq::SliceRandom;
@@ -39,6 +38,21 @@ async fn main() {
             )
         };
 
+    let index = match watermark_path.rfind('.') {
+        Some(index) => index,
+        None => {
+            println!("Invalid path found. Check that your watermark path is valid...");
+            process::exit(1);
+        }
+    };
+
+    let watermark_mime = &watermark_path[index + 1..];
+
+    if !is_valid_mime(watermark_mime) {
+        println!("Did not find valid images for {}", watermark_mime);
+        process::exit(1);
+    }
+
     let image_paths: Vec<String> =
         if &args[0] == "-d" || &args[0] == "-dir" || &args[0] == "--directory" {
             let directories_paths: Vec<&String> = args.iter().skip(1).collect();
@@ -58,11 +72,7 @@ async fn main() {
 
         let mime = &img_path[index + 1..];
 
-        if !ACCEPTED_MIMETYPES
-            .map(|m| m.extension)
-            .as_slice()
-            .contains(&mime)
-        {
+        if !is_valid_mime(mime) {
             println!("Did not find valid images for {}", mime);
             process::exit(1);
         }
@@ -83,8 +93,13 @@ async fn main() {
         })
         .collect();
 
-    let watermark: DynamicImage =
-        image::open(watermark_path).expect("Could not load watermark file");
+    let watermark: DynamicImage = match image::open(watermark_path) {
+        Ok(image) => image,
+        Err(_) => {
+            println!("Could not load watermark file");
+            process::exit(1)
+        }
+    };
 
     if images_to_process.iter().any(|image| {
         image.data.width() <= watermark.width() || image.data.height() <= watermark.height()

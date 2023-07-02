@@ -3,6 +3,15 @@ use std::{fs, time::Duration};
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 
+use crate::constants::ACCEPTED_MIMETYPES;
+
+pub fn is_valid_mime(mime: &str) -> bool {
+    ACCEPTED_MIMETYPES
+        .map(|m| m.extension)
+        .as_slice()
+        .contains(&mime)
+}
+
 pub fn get_dirs_images_paths(dirs: Vec<&String>) -> Vec<String> {
     let mut image_paths: Vec<String> = Vec::new();
 
