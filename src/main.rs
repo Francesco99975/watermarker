@@ -70,12 +70,16 @@ async fn main() {
 
     let images_to_process: Vec<LoadedImage> = image_paths
         .iter()
-        .map(|path| LoadedImage {
-            data: image::open(path).expect("Could not load image"),
-            filename: path[path.rfind('/').expect("Invalid Path") + 1
-                ..path.rfind('.').expect("Invalid Path Ext")]
-                .to_string(),
-            ext: path[path.rfind('.').expect("Invalid Ext") + 1..].to_string(),
+        .map(|path| {
+            let start_index = match path.rfind('/') {
+                Some(index) => index + 1,
+                None => 0,
+            };
+            LoadedImage {
+                data: image::open(path).expect("Could not load image"),
+                filename: path[start_index..path.rfind('.').expect("Invalid Path Ext")].to_string(),
+                ext: path[path.rfind('.').expect("Invalid Ext") + 1..].to_string(),
+            }
         })
         .collect();
 
