@@ -2,7 +2,7 @@
 name = "watermarker"
 version = "0.3.0"
 authors = ["Francesco Michele Barranca kalairendev@francescobarranca.dev"]
-license = "BSD-3-Clause"
+license = "GPL-3.0"
 description = "A cli tool to watermark images with smaller images"
 readme = "README.md"
 homepage = "https://github.com/Francesco99975/watermarker"
