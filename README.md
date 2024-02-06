@@ -4,7 +4,13 @@
 
 ---
 
-## Download the latest [release](https://github.com/Francesco99975/watermarker/releases/download/0.3.0/watermarker)
+## **Install**
+
+```bash
+cargo install watermarker
+```
+
+### Or Download the latest [release](https://github.com/Francesco99975/watermarker/releases/download/0.3.0/watermarker)
 
 ---
 

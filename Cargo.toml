@@ -1,6 +1,14 @@
 [package]
 name = "watermarker"
 version = "0.3.0"
+authors = ["Francesco Michele Barranca kalairendev@francescobarranca.dev"]
+license = "BSD-3-Clause"
+description = "A cli tool to watermark images with smaller images"
+readme = "README.md"
+homepage = "https://github.com/Francesco99975/watermarker"
+repository = "https://github.com/Francesco99975/watermarker"
+keywords = ["cli", "watermark", "images", "tools", "modification"]
+categories = ["command-line-utilities"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
